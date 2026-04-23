@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
     if (trimmedQuery && !isNaN(Number(trimmedQuery))) {
       requestDb.input('id', sql.Int, parseInt(trimmedQuery, 10));
       result = await requestDb.query(`
-        SELECT Id, Nome, Preco, Estoque, ISNULL(Ativo, 1) AS Ativo
+        SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus
         FROM Produtos
-        WHERE Id = @id AND (Ativo = 1 OR Ativo IS NULL)
+        WHERE Id = @id AND ISNULL([Status], 1) = 1
       `);
     } else if (trimmedQuery) {
       // Buscar por nome (LIKE case-insensitive e accent-insensitive) - busca semântica
@@ -37,10 +37,10 @@ export async function GET(request: NextRequest) {
       // Preservar espaços no meio da busca (apenas trim no início/fim)
       requestDb.input('nome', sql.VarChar(100), `%${trimmedQuery}%`);
       result = await requestDb.query(`
-        SELECT Id, Nome, Preco, Estoque, ISNULL(Ativo, 1) AS Ativo
+        SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus
         FROM Produtos
         WHERE Nome COLLATE Latin1_General_CI_AI LIKE @nome COLLATE Latin1_General_CI_AI
-          AND (Ativo = 1 OR Ativo IS NULL)
+          AND ISNULL([Status], 1) = 1
         ORDER BY Nome
       `);
     } else {
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       const limit = limitParam && !isNaN(Number(limitParam)) ? Math.min(Number(limitParam), 2000) : 100;
       requestDb.input('limit', sql.Int, limit);
       result = await requestDb.query(`
-        SELECT TOP (@limit) Id, Nome, Preco, Estoque, ISNULL(Ativo, 1) AS Ativo
+        SELECT TOP (@limit) Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus
         FROM Produtos
         ORDER BY Nome
       `);
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       nome: row.Nome,
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
-      ativo: row.Ativo !== undefined ? Boolean(row.Ativo) : true,
+      ativo: Number(row.ProductStatus ?? 1) === 1,
     }));
 
     return NextResponse.json({ products });
@@ -120,9 +120,9 @@ export async function POST(request: NextRequest) {
     requestDb.input('estoque', sql.Int, estoque);
 
     const result = await requestDb.query(`
-      INSERT INTO Produtos (Nome, Preco, Estoque)
+      INSERT INTO Produtos (Nome, Preco, Estoque, [Status])
       OUTPUT INSERTED.Id, INSERTED.Nome, INSERTED.Preco, INSERTED.Estoque
-      VALUES (@nome, @preco, @estoque)
+      VALUES (@nome, @preco, @estoque, 1)
     `);
 
     const row = result.recordset[0];

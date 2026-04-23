@@ -47,7 +47,7 @@ export async function PATCH(
     `);
 
     const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL(Ativo, 1) AS Ativo FROM Produtos WHERE Id = @id
+      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus FROM Produtos WHERE Id = @id
     `);
     const row = selectResult.recordset?.[0];
     if (!row) {
@@ -62,7 +62,7 @@ export async function PATCH(
       nome: row.Nome,
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
-      ativo: row.Ativo !== undefined ? Boolean(row.Ativo) : true,
+      ativo: Number(row.ProductStatus ?? 1) === 1,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]/stock:', error);

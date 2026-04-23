@@ -65,8 +65,8 @@ export async function PATCH(
       sets.push('Estoque = @estoque');
     }
     if (ativo !== undefined) {
-      requestDb.input('ativo', sql.Bit, ativo ? 1 : 0);
-      sets.push('Ativo = @ativo');
+      requestDb.input('statusVal', sql.Int, ativo ? 1 : 0);
+      sets.push('[Status] = @statusVal');
     }
 
     if (sets.length === 0) {
@@ -83,7 +83,7 @@ export async function PATCH(
     `);
 
     const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, Ativo
+      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus
       FROM Produtos
       WHERE Id = @id
     `);
@@ -100,7 +100,7 @@ export async function PATCH(
       nome: row.Nome,
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
-      ativo: Boolean(row.Ativo),
+      ativo: Number(row.ProductStatus ?? 1) === 1,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]:', error);
