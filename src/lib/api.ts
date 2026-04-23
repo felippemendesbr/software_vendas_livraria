@@ -5,6 +5,8 @@ export interface Product {
   estoque: number;
   /** Coluna [Status] no banco: true quando Status = 1 */
   ativo?: boolean;
+  /** Coluna path_image: caminho público (ex.: /uploads/products/1-123.jpg) */
+  pathImage?: string | null;
 }
 
 export interface CartItem {
@@ -91,12 +93,12 @@ export async function fetchProducts(query: string): Promise<Product[]> {
       ? `/api/products?query=${encodeURIComponent(query)}`
       : '/api/products';
     
-    const response = await fetch(url);
-    
+    const response = await fetch(url, { cache: 'no-store' });
+
     if (!response.ok) {
       throw new Error(`Erro ao buscar produtos: ${response.statusText}`);
     }
-    
+
     const data = await response.json();
     return data.products || [];
   } catch (error) {
@@ -225,7 +227,7 @@ export async function fetchProductsList(limit?: number): Promise<Product[]> {
   const url = limit
     ? `/api/products?limit=${limit}`
     : '/api/products';
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error('Erro ao listar produtos');
   const data = await response.json();
   return data.products || [];
@@ -249,11 +251,16 @@ export async function updateProduct(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      cache: 'no-store',
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || errorData.error || 'Erro ao atualizar produto');
+      throw new Error(
+        errorData.message ||
+          errorData.error ||
+          `Erro ao atualizar produto (${response.status})`
+      );
     }
 
     return await response.json();
@@ -261,4 +268,22 @@ export async function updateProduct(
     console.error('Erro ao atualizar produto:', error);
     throw error;
   }
+}
+
+/**
+ * Envia foto do produto (multipart, campo "file"). Atualiza path_image no banco.
+ */
+export async function uploadProductImage(productId: number, file: File): Promise<Product> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`/api/products/${productId}/image`, {
+    method: 'POST',
+    body: formData,
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || errorData.error || 'Erro ao enviar imagem');
+  }
+  return response.json();
 }

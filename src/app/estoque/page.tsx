@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -20,6 +20,7 @@ import {
   createProduct,
   fetchProductsList,
   updateProduct,
+  uploadProductImage,
 } from '@/lib/api';
 
 interface ToastState {
@@ -76,6 +77,11 @@ export default function EstoquePage() {
   const [editPreco, setEditPreco] = useState('');
   const [editEstoque, setEditEstoque] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const editImageObjectUrlRef = useRef<string | null>(null);
+  const editImageFileRef = useRef<File | null>(null);
+  const editBasePathImageRef = useRef<string | null>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   const [sortColumn, setSortColumn] = useState<SortableColumn>('id');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
@@ -107,15 +113,15 @@ export default function EstoquePage() {
     setToast({ message, type });
   };
 
-  const loadProducts = async () => {
-    setLoadingList(true);
+  const loadProducts = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingList(true);
     try {
       const list = await fetchProductsList(2000);
       setProducts(list);
     } catch (e) {
       showToast('Erro ao carregar lista de produtos', 'error');
     } finally {
-      setLoadingList(false);
+      if (!opts?.silent) setLoadingList(false);
     }
   };
 
@@ -157,37 +163,77 @@ export default function EstoquePage() {
     }
   };
 
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (editImageObjectUrlRef.current) {
+      URL.revokeObjectURL(editImageObjectUrlRef.current);
+      editImageObjectUrlRef.current = null;
+    }
+    if (f) {
+      editImageFileRef.current = f;
+      const url = URL.createObjectURL(f);
+      editImageObjectUrlRef.current = url;
+      setEditImagePreview(url);
+    } else {
+      editImageFileRef.current = null;
+      setEditImagePreview(editBasePathImageRef.current);
+    }
+  };
+
   const startEdit = (p: Product) => {
+    if (editImageObjectUrlRef.current) {
+      URL.revokeObjectURL(editImageObjectUrlRef.current);
+      editImageObjectUrlRef.current = null;
+    }
     setEditingId(p.id);
     setEditPreco(String(p.preco));
     setEditEstoque(String(p.estoque));
+    editBasePathImageRef.current = p.pathImage ?? null;
+    setEditImagePreview(p.pathImage ?? null);
+    editImageFileRef.current = null;
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
   };
 
   const cancelEdit = () => {
+    if (editImageObjectUrlRef.current) {
+      URL.revokeObjectURL(editImageObjectUrlRef.current);
+      editImageObjectUrlRef.current = null;
+    }
     setEditingId(null);
     setEditPreco('');
     setEditEstoque('');
+    editImageFileRef.current = null;
+    setEditImagePreview(null);
+    editBasePathImageRef.current = null;
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
   };
 
   const saveEdit = async () => {
     if (editingId == null) return;
-    const preco = parseFloat(editPreco.replace(',', '.'));
-    const estoque = parseInt(editEstoque, 10);
+    const produtoId = editingId;
+    const preco = parseFloat(String(editPreco).replace(',', '.'));
+    const estoqueRaw = String(editEstoque).trim();
+    const estoque = parseInt(estoqueRaw, 10);
     if (isNaN(preco) || preco < 0) {
       showToast('Preço inválido', 'warning');
       return;
     }
-    if (isNaN(estoque) || estoque < 0) {
+    if (estoqueRaw === '' || isNaN(estoque) || estoque < 0) {
       showToast('Estoque inválido', 'warning');
       return;
     }
 
+    const arquivoImagem = editImageFileRef.current;
+
     setSubmittingEdit(true);
     try {
-      await updateProduct(editingId, { preco, estoque });
+      await updateProduct(produtoId, { preco, estoque });
+      if (arquivoImagem) {
+        await uploadProductImage(produtoId, arquivoImagem);
+      }
       showToast('Produto atualizado', 'success');
       cancelEdit();
-      loadProducts();
+      await loadProducts({ silent: true });
     } catch (err: any) {
       showToast(err?.message || 'Erro ao atualizar', 'error');
     } finally {
@@ -286,7 +332,7 @@ export default function EstoquePage() {
                 Produtos cadastrados
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Use o lápis para editar preço e estoque. O status exibido é o da coluna Status no banco (o sistema atualiza Status conforme o estoque).
+                Use o lápis para editar preço, estoque e foto (upload gravado em path_image no banco). O status exibido vem da coluna Status no banco.
               </p>
             </div>
             <div className="flex-shrink-0 w-full sm:w-64">
@@ -328,6 +374,9 @@ export default function EstoquePage() {
                             <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
                           ))}
                       </button>
+                    </th>
+                    <th className="py-3 px-1 text-center font-semibold w-20" scope="col">
+                      Foto
                     </th>
                     <th className="py-3 px-2 text-left" scope="col">
                       <button
@@ -411,6 +460,41 @@ export default function EstoquePage() {
                       }`}
                     >
                       <td className="py-2 px-2 font-mono text-gray-600">{p.id}</td>
+                      <td className="py-2 px-1 w-20 align-middle text-center">
+                        {editingId === p.id ? (
+                          <div className="flex flex-col gap-1 items-center">
+                            {editImagePreview ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={editImagePreview}
+                                alt=""
+                                className="h-14 w-14 rounded object-cover border border-gray-200"
+                              />
+                            ) : (
+                              <span className="text-[10px] text-gray-400">Sem foto</span>
+                            )}
+                            <label className="text-[10px] text-[#1F1312] cursor-pointer hover:underline text-center leading-tight">
+                              <input
+                                ref={editFileInputRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="sr-only"
+                                onChange={handleEditImageChange}
+                              />
+                              Enviar foto
+                            </label>
+                          </div>
+                        ) : p.pathImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={p.pathImage}
+                            alt=""
+                            className="h-12 w-12 rounded object-cover border border-gray-200 mx-auto"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
                       <td className="py-2 px-2 font-medium">{p.nome}</td>
 
                       {editingId === p.id ? (
@@ -439,7 +523,11 @@ export default function EstoquePage() {
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
-                                onClick={saveEdit}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void saveEdit();
+                                }}
                                 disabled={submittingEdit}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50"
                                 title="Salvar"
@@ -496,7 +584,7 @@ export default function EstoquePage() {
                                 type="button"
                                 onClick={() => startEdit(p)}
                                 className="p-2 text-[#1F1312] hover:bg-gray-200 rounded-lg"
-                                title="Editar preço e estoque"
+                                title="Editar preço, estoque e foto"
                               >
                                 <Pencil className="w-5 h-5" />
                               </button>

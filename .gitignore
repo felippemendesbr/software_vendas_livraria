@@ -34,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# uploads de fotos de produtos (mantém só .gitkeep)
+/public/uploads/products/*
+!/public/uploads/products/.gitkeep

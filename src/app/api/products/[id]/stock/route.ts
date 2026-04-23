@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbPool } from '@/lib/db';
+import {
+  getProdutosSchema,
+  sqlPathImageSelect,
+  sqlProductStatusSelect,
+  sqlSyncActiveFromStock,
+} from '@/lib/produtos-schema';
 import sql from 'mssql';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -36,24 +42,30 @@ export async function PATCH(
     }
 
     const pool = await getDbPool();
-    const requestDb = pool.request();
-    requestDb.input('id', sql.Int, id);
-    requestDb.input('quantidade', sql.Int, quantidade);
+    const schema = await getProdutosSchema(pool);
 
-    await requestDb.query(`
+    const updateStockReq = pool.request();
+    updateStockReq.input('id', sql.Int, id);
+    updateStockReq.input('quantidade', sql.Int, quantidade);
+    await updateStockReq.query(`
       UPDATE Produtos
       SET Estoque = Estoque + @quantidade
       WHERE Id = @id
     `);
 
-    await requestDb.query(`
-      UPDATE Produtos
-      SET [Status] = CASE WHEN Estoque > 0 THEN 1 ELSE 0 END
-      WHERE Id = @id
-    `);
+    const syncSql = sqlSyncActiveFromStock(schema);
+    if (syncSql) {
+      const syncReq = pool.request();
+      syncReq.input('id', sql.Int, id);
+      await syncReq.query(syncSql);
+    }
 
-    const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
+    const statusSel = sqlProductStatusSelect(schema);
+    const pathSel = sqlPathImageSelect(schema);
+    const selectReq = pool.request();
+    selectReq.input('id', sql.Int, id);
+    const selectResult = await selectReq.query(`
+      SELECT Id, Nome, Preco, Estoque, ${statusSel}, ${pathSel}
       FROM Produtos WHERE Id = @id
     `);
     const row = selectResult.recordset?.[0];
@@ -70,6 +82,10 @@ export async function PATCH(
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
       ativo: Number(row.ProductStatus) === 1,
+      pathImage:
+        row.pathImage != null && String(row.pathImage).trim() !== ''
+          ? String(row.pathImage).trim()
+          : null,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]/stock:', error);

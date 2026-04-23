@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbPool, discoverPedidosSchema, checkPedidoItensFormaPagamento } from '@/lib/db';
+import { getProdutosSchema, sqlProductStatusSelect } from '@/lib/produtos-schema';
 import sql, { ISOLATION_LEVEL } from 'mssql';
 
 interface SaleItem {
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     const pool = await getDbPool();
+    const produtosSchema = await getProdutosSchema(pool);
+    const statusSel = sqlProductStatusSelect(produtosSchema);
     // Criar transação passando o pool no construtor
     transaction = new sql.Transaction(pool);
     
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
     });
 
     const produtosResult = await produtosRequest.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
+      SELECT Id, Nome, Preco, Estoque, ${statusSel}
       FROM Produtos
       WHERE Id IN (${produtosPlaceholders})
     `);

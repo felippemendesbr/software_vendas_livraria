@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbPool } from '@/lib/db';
+import {
+  getProdutosSchema,
+  sqlPathImageSelect,
+  sqlProductStatusSelect,
+  sqlSyncActiveFromStock,
+} from '@/lib/produtos-schema';
 import sql from 'mssql';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -51,16 +57,17 @@ export async function PATCH(
     }
 
     const pool = await getDbPool();
-    const requestDb = pool.request();
-    requestDb.input('id', sql.Int, id);
+    const schema = await getProdutosSchema(pool);
 
     const sets: string[] = [];
+    const updateReq = pool.request();
+    updateReq.input('id', sql.Int, id);
     if (preco !== undefined) {
-      requestDb.input('preco', sql.Decimal(10, 2), preco);
+      updateReq.input('preco', sql.Decimal(10, 2), preco);
       sets.push('Preco = @preco');
     }
     if (estoque !== undefined) {
-      requestDb.input('estoque', sql.Int, estoque);
+      updateReq.input('estoque', sql.Int, estoque);
       sets.push('Estoque = @estoque');
     }
 
@@ -71,20 +78,25 @@ export async function PATCH(
       );
     }
 
-    await requestDb.query(`
+    await updateReq.query(`
       UPDATE Produtos
       SET ${sets.join(', ')}
       WHERE Id = @id
     `);
 
-    await requestDb.query(`
-      UPDATE Produtos
-      SET [Status] = CASE WHEN Estoque > 0 THEN 1 ELSE 0 END
-      WHERE Id = @id
-    `);
+    const syncSql = sqlSyncActiveFromStock(schema);
+    if (syncSql) {
+      const syncStatusReq = pool.request();
+      syncStatusReq.input('id', sql.Int, id);
+      await syncStatusReq.query(syncSql);
+    }
 
-    const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
+    const statusSel = sqlProductStatusSelect(schema);
+    const pathSel = sqlPathImageSelect(schema);
+    const selectReq = pool.request();
+    selectReq.input('id', sql.Int, id);
+    const selectResult = await selectReq.query(`
+      SELECT Id, Nome, Preco, Estoque, ${statusSel}, ${pathSel}
       FROM Produtos
       WHERE Id = @id
     `);
@@ -102,13 +114,18 @@ export async function PATCH(
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
       ativo: Number(row.ProductStatus) === 1,
+      pathImage:
+        row.pathImage != null && String(row.pathImage).trim() !== ''
+          ? String(row.pathImage).trim()
+          : null,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]:', error);
+    const msg = error?.message || 'Erro desconhecido';
     return NextResponse.json(
       {
         error: 'Erro ao atualizar produto',
-        message: error?.message || 'Erro desconhecido',
+        message: msg,
       },
       { status: 500 }
     );

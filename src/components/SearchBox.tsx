@@ -280,8 +280,18 @@ export default function SearchBox({ onSelectProduct, onFocus, placeholder, autoF
               className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors ${index === selectedIndex ? 'bg-blue-100 ring-2 ring-blue-300' : ''
                 } ${index !== results.length - 1 ? 'border-b border-gray-100' : ''}`}
             >
-              <div className="flex justify-between items-center">
-                <div className="flex-1">
+              <div className="flex justify-between items-center gap-3">
+                {product.pathImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={product.pathImage}
+                    alt=""
+                    className="h-11 w-11 shrink-0 rounded object-cover border border-gray-200"
+                  />
+                ) : (
+                  <div className="h-11 w-11 shrink-0 rounded bg-gray-100 border border-dashed border-gray-200" />
+                )}
+                <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900">
                     {highlightText(product.nome, query)}
                   </p>
