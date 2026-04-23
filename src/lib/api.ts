@@ -3,6 +3,7 @@ export interface Product {
   nome: string;
   preco: number;
   estoque: number;
+  /** Coluna [Status] no banco: true quando Status = 1 */
   ativo?: boolean;
 }
 
@@ -234,11 +235,10 @@ export async function fetchProductsList(limit?: number): Promise<Product[]> {
 export interface UpdateProductPayload {
   preco?: number;
   estoque?: number;
-  ativo?: boolean;
 }
 
 /**
- * Atualiza produto (preço, estoque e/ou ativo)
+ * Atualiza produto (preço e/ou estoque). A coluna [Status] no banco é recalculada a partir do estoque.
  */
 export async function updateProduct(
   productId: number,

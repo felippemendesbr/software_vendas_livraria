@@ -5,8 +5,9 @@ import sql from 'mssql';
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
- * PATCH /api/products/[id] - Atualizar produto (preço, estoque, ativo)
- * Body: { preco?: number, estoque?: number, ativo?: boolean }
+ * PATCH /api/products/[id] - Atualizar produto (preço e/ou estoque).
+ * Status no banco segue a regra: ativo (1) se Estoque > 0, senão inativo (0).
+ * Body: { preco?: number, estoque?: number }
  */
 export async function PATCH(
   request: NextRequest,
@@ -35,8 +36,6 @@ export async function PATCH(
           ? body.estoque
           : parseInt(String(body.estoque), 10)
         : undefined;
-    const ativo =
-      body.ativo !== undefined ? Boolean(body.ativo) : undefined;
 
     if (preco !== undefined && (isNaN(preco) || preco < 0)) {
       return NextResponse.json(
@@ -64,14 +63,10 @@ export async function PATCH(
       requestDb.input('estoque', sql.Int, estoque);
       sets.push('Estoque = @estoque');
     }
-    if (ativo !== undefined) {
-      requestDb.input('statusVal', sql.Int, ativo ? 1 : 0);
-      sets.push('[Status] = @statusVal');
-    }
 
     if (sets.length === 0) {
       return NextResponse.json(
-        { error: 'Envie ao menos um campo: preco, estoque ou ativo' },
+        { error: 'Envie ao menos um campo: preco ou estoque' },
         { status: 400 }
       );
     }
@@ -82,8 +77,14 @@ export async function PATCH(
       WHERE Id = @id
     `);
 
+    await requestDb.query(`
+      UPDATE Produtos
+      SET [Status] = CASE WHEN Estoque > 0 THEN 1 ELSE 0 END
+      WHERE Id = @id
+    `);
+
     const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus
+      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
       FROM Produtos
       WHERE Id = @id
     `);
@@ -100,7 +101,7 @@ export async function PATCH(
       nome: row.Nome,
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
-      ativo: Number(row.ProductStatus ?? 1) === 1,
+      ativo: Number(row.ProductStatus) === 1,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]:', error);

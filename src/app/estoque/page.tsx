@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -10,9 +10,9 @@ import {
   Pencil,
   Check,
   X,
-  Power,
-  PowerOff,
   Search,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import Toast, { ToastType } from '@/components/Toast';
 import {
@@ -25,6 +25,35 @@ import {
 interface ToastState {
   message: string;
   type: ToastType;
+}
+
+type SortableColumn = 'id' | 'nome' | 'preco' | 'estoque' | 'status';
+type SortDirection = 'asc' | 'desc';
+
+function compareProducts(
+  a: Product,
+  b: Product,
+  col: SortableColumn,
+  dir: SortDirection
+): number {
+  const mul = dir === 'asc' ? 1 : -1;
+  switch (col) {
+    case 'id':
+      return (a.id - b.id) * mul;
+    case 'nome':
+      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }) * mul;
+    case 'preco':
+      return (a.preco - b.preco) * mul;
+    case 'estoque':
+      return (a.estoque - b.estoque) * mul;
+    case 'status': {
+      const av = a.ativo !== false ? 1 : 0;
+      const bv = b.ativo !== false ? 1 : 0;
+      return (av - bv) * mul;
+    }
+    default:
+      return 0;
+  }
 }
 
 export default function EstoquePage() {
@@ -48,8 +77,31 @@ export default function EstoquePage() {
   const [editEstoque, setEditEstoque] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  // Toggle ativo
-  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [sortColumn, setSortColumn] = useState<SortableColumn>('id');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
+
+  const handleSortHeader = (col: SortableColumn) => {
+    if (col === sortColumn) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDir('asc');
+    }
+  };
+
+  const displayedProducts = useMemo(() => {
+    const term = searchFilter.trim().toLowerCase();
+    const filtered =
+      term === ''
+        ? products
+        : products.filter(
+            (p) =>
+              p.nome.toLowerCase().includes(term) ||
+              String(p.id) === term ||
+              String(p.id).startsWith(term)
+          );
+    return [...filtered].sort((a, b) => compareProducts(a, b, sortColumn, sortDir));
+  }, [products, searchFilter, sortColumn, sortDir]);
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -143,23 +195,6 @@ export default function EstoquePage() {
     }
   };
 
-  const handleToggleAtivo = async (p: Product) => {
-    const novoAtivo = !(p.ativo ?? true);
-    setTogglingId(p.id);
-    try {
-      await updateProduct(p.id, { ativo: novoAtivo });
-      showToast(
-        novoAtivo ? `"${p.nome}" ativado` : `"${p.nome}" inativado`,
-        'success'
-      );
-      loadProducts();
-    } catch (err: any) {
-      showToast(err?.message || 'Erro ao alterar status', 'error');
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#E6E1CF] to-[#F2EFE6]">
       <header className="bg-white border-b border-[#E6E1CF] shadow-sm sticky top-0 z-10">
@@ -242,7 +277,7 @@ export default function EstoquePage() {
           </form>
         </section>
 
-        {/* Lista de produtos: edição inline (lápis) + inativar */}
+        {/* Lista de produtos: edição inline (lápis); status derivado do estoque */}
         <section className="bg-white rounded-2xl shadow-md border border-[#E6E1CF] p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div>
@@ -251,7 +286,7 @@ export default function EstoquePage() {
                 Produtos cadastrados
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Use o lápis para editar preço e estoque na linha. Use o botão Ativar/Inativar para desativar itens sem excluir.
+                Use o lápis para editar preço e estoque. O status exibido é o da coluna Status no banco (o sistema atualiza Status conforme o estoque).
               </p>
             </div>
             <div className="flex-shrink-0 w-full sm:w-64">
@@ -271,34 +306,104 @@ export default function EstoquePage() {
             <p className="text-gray-500">Carregando...</p>
           ) : products.length === 0 ? (
             <p className="text-gray-500">Nenhum produto cadastrado.</p>
-          ) : (() => {
-            const term = searchFilter.trim().toLowerCase();
-            const filtered =
-              term === ''
-                ? products
-                : products.filter(
-                    (p) =>
-                      p.nome.toLowerCase().includes(term) ||
-                      String(p.id) === term ||
-                      String(p.id).startsWith(term)
-                  );
-            return filtered.length === 0 ? (
-              <p className="text-gray-500">Nenhum produto encontrado para &quot;{searchFilter}&quot;.</p>
-            ) : (
+          ) : displayedProducts.length === 0 ? (
+            <p className="text-gray-500">Nenhum produto encontrado para &quot;{searchFilter}&quot;.</p>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b-2 border-gray-200 text-left text-gray-600">
-                    <th className="py-3 px-2">ID</th>
-                    <th className="py-3 px-2">Nome</th>
-                    <th className="py-3 px-2 text-right">Preço</th>
-                    <th className="py-3 px-2 text-right">Estoque</th>
-                    <th className="py-3 px-2 text-center">Status</th>
-                    <th className="py-3 px-2 text-center w-28">Ações</th>
+                  <tr className="border-b-2 border-gray-200 text-gray-600">
+                    <th className="py-3 px-2 text-left" scope="col">
+                      <button
+                        type="button"
+                        onClick={() => handleSortHeader('id')}
+                        className="inline-flex items-center gap-1 font-semibold hover:text-[#1F1312] select-none cursor-pointer"
+                        aria-sort={sortColumn === 'id' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        ID
+                        {sortColumn === 'id' &&
+                          (sortDir === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ))}
+                      </button>
+                    </th>
+                    <th className="py-3 px-2 text-left" scope="col">
+                      <button
+                        type="button"
+                        onClick={() => handleSortHeader('nome')}
+                        className="inline-flex items-center gap-1 font-semibold hover:text-[#1F1312] select-none cursor-pointer"
+                        aria-sort={sortColumn === 'nome' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        Nome
+                        {sortColumn === 'nome' &&
+                          (sortDir === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ))}
+                      </button>
+                    </th>
+                    <th className="py-3 px-2 text-right" scope="col">
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleSortHeader('preco')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#1F1312] select-none cursor-pointer"
+                          aria-sort={sortColumn === 'preco' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          Preço
+                          {sortColumn === 'preco' &&
+                            (sortDir === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            ))}
+                        </button>
+                      </div>
+                    </th>
+                    <th className="py-3 px-2 text-right" scope="col">
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleSortHeader('estoque')}
+                          className="inline-flex items-center gap-1 font-semibold hover:text-[#1F1312] select-none cursor-pointer"
+                          aria-sort={sortColumn === 'estoque' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          Estoque
+                          {sortColumn === 'estoque' &&
+                            (sortDir === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            ))}
+                        </button>
+                      </div>
+                    </th>
+                    <th className="py-3 px-2 text-center" scope="col">
+                      <button
+                        type="button"
+                        onClick={() => handleSortHeader('status')}
+                        className="inline-flex items-center justify-center gap-1 font-semibold hover:text-[#1F1312] select-none cursor-pointer w-full"
+                        aria-sort={sortColumn === 'status' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        Status
+                        {sortColumn === 'status' &&
+                          (sortDir === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          ))}
+                      </button>
+                    </th>
+                    <th className="py-3 px-2 text-center w-28 font-semibold" scope="col">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => (
+                  {displayedProducts.map((p) => (
                     <tr
                       key={p.id}
                       className={`border-b border-gray-100 hover:bg-gray-50 ${
@@ -370,31 +475,20 @@ export default function EstoquePage() {
                             {p.estoque}
                           </td>
                           <td className="py-2 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleAtivo(p)}
-                              disabled={togglingId === p.id}
+                            <span
                               className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
                                 p.ativo !== false
-                                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                              } disabled:opacity-50`}
-                              title={p.ativo !== false ? 'Inativar item' : 'Ativar item'}
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-200 text-gray-600'
+                              }`}
+                              title={
+                                p.ativo !== false
+                                  ? 'Status ativo no banco (Status = 1)'
+                                  : 'Status inativo no banco (Status = 0)'
+                              }
                             >
-                              {togglingId === p.id ? (
-                                <span className="animate-pulse">...</span>
-                              ) : p.ativo !== false ? (
-                                <>
-                                  <Power className="w-3.5 h-3.5" />
-                                  Ativo
-                                </>
-                              ) : (
-                                <>
-                                  <PowerOff className="w-3.5 h-3.5" />
-                                  Inativo
-                                </>
-                              )}
-                            </button>
+                              {p.ativo !== false ? 'Ativo' : 'Inativo'}
+                            </span>
                           </td>
                           <td className="py-2 px-2">
                             <div className="flex items-center justify-center">
@@ -415,8 +509,7 @@ export default function EstoquePage() {
                 </tbody>
               </table>
             </div>
-            );
-          })()}
+          )}
         </section>
       </div>
 

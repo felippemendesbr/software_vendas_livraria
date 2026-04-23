@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     });
 
     const produtosResult = await produtosRequest.query(`
-      SELECT Id, Nome, Preco, Estoque
+      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
       FROM Produtos
       WHERE Id IN (${produtosPlaceholders})
     `);
@@ -94,8 +94,32 @@ export async function POST(request: NextRequest) {
     }
 
     const produtosMap = new Map(
-      produtosResult.recordset.map((p: any) => [p.Id, { nome: p.Nome, preco: parseFloat(p.Preco), estoque: p.Estoque }])
+      produtosResult.recordset.map((p: any) => [
+        p.Id,
+        {
+          nome: p.Nome,
+          preco: parseFloat(p.Preco),
+          estoque: p.Estoque,
+          ativo: Number(p.ProductStatus) === 1,
+        },
+      ])
     );
+
+    for (const id of produtoIds) {
+      const p = produtosMap.get(id);
+      if (p && !p.ativo) {
+        if (transaction && transactionStarted) {
+          await transaction.rollback();
+        }
+        return NextResponse.json(
+          {
+            error: 'Produto inativo no cadastro',
+            message: `"${p.nome}" não pode ser vendido (Status = 0 no banco).`,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // 2. Validar estoque e calcular total
     let total = 0;

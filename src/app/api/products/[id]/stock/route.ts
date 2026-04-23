@@ -46,8 +46,15 @@ export async function PATCH(
       WHERE Id = @id
     `);
 
+    await requestDb.query(`
+      UPDATE Produtos
+      SET [Status] = CASE WHEN Estoque > 0 THEN 1 ELSE 0 END
+      WHERE Id = @id
+    `);
+
     const selectResult = await requestDb.query(`
-      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 1) AS ProductStatus FROM Produtos WHERE Id = @id
+      SELECT Id, Nome, Preco, Estoque, ISNULL([Status], 0) AS ProductStatus
+      FROM Produtos WHERE Id = @id
     `);
     const row = selectResult.recordset?.[0];
     if (!row) {
@@ -62,7 +69,7 @@ export async function PATCH(
       nome: row.Nome,
       preco: parseFloat(row.Preco),
       estoque: row.Estoque,
-      ativo: Number(row.ProductStatus ?? 1) === 1,
+      ativo: Number(row.ProductStatus) === 1,
     });
   } catch (error: any) {
     console.error('❌ ERRO PATCH /api/products/[id]/stock:', error);
