@@ -4,6 +4,11 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { getDbPool } from '@/lib/db';
 import {
+  deleteProductImageRemoteIfApplicable,
+  isProductImageRemoteStorageEnabled,
+  uploadProductImageRemote,
+} from '@/lib/product-image-storage';
+import {
   getProdutosSchema,
   sqlPathImageSelect,
   sqlProductStatusSelect,
@@ -36,7 +41,8 @@ function resolveStoredImagePath(publicPath: string): string | null {
 
 /**
  * POST /api/products/[id]/image — multipart, campo "file".
- * Grava em public/uploads/products e atualiza path_image no banco.
+ * Com S3_* configurado no .env: envia para bucket e grava URL pública em path_image.
+ * Sem isso: grava em public/uploads/products (somente disco do servidor).
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -100,13 +106,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : null;
 
     const filename = `${id}-${Date.now()}.${ext}`;
-    const dir = uploadsRootAbs();
-    await mkdir(dir, { recursive: true });
-    const absFile = path.join(dir, filename);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(absFile, buffer);
+    const useRemote = isProductImageRemoteStorageEnabled();
 
-    const publicPath = `/uploads/products/${filename}`;
+    let publicPath: string;
+    let localAbsForCleanup: string | null = null;
+    if (useRemote) {
+      publicPath = await uploadProductImageRemote(buffer, file.type, filename);
+    } else {
+      const dir = uploadsRootAbs();
+      await mkdir(dir, { recursive: true });
+      const absFile = path.join(dir, filename);
+      await writeFile(absFile, buffer);
+      localAbsForCleanup = absFile;
+      publicPath = `/uploads/products/${filename}`;
+    }
 
     const updateReq = pool.request();
     updateReq.input('id', sql.Int, id);
@@ -124,13 +138,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await syncReq.query(syncSql);
     }
 
-    if (prevPath) {
-      const oldAbs = resolveStoredImagePath(prevPath);
-      if (oldAbs && existsSync(oldAbs) && oldAbs !== absFile) {
-        try {
-          await unlink(oldAbs);
-        } catch {
-          // arquivo antigo pode já ter sido removido
+    if (prevPath && prevPath !== publicPath) {
+      if (/^https?:\/\//i.test(prevPath)) {
+        await deleteProductImageRemoteIfApplicable(prevPath);
+      } else {
+        const oldAbs = resolveStoredImagePath(prevPath);
+        if (
+          oldAbs &&
+          existsSync(oldAbs) &&
+          (!localAbsForCleanup || oldAbs !== localAbsForCleanup)
+        ) {
+          try {
+            await unlink(oldAbs);
+          } catch {
+            // arquivo antigo pode já ter sido removido
+          }
         }
       }
     }

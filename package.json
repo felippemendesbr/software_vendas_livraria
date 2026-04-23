@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1036.0",
     "framer-motion": "^12.29.2",
     "lucide-react": "^0.563.0",
     "mssql": "^11.0.1",
