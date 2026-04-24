@@ -168,11 +168,22 @@ export async function GET(request: NextRequest) {
 
       req.input('lim', sql.Int, limit);
 
+      /** Ativos primeiro; em seguida a coluna/tipo de ordenação solicitados */
+      let orderByAtivoPrimeiro = '';
+      if (schema.estadoColumn) {
+        const ec = `p.${bracketId(schema.estadoColumn)}`;
+        if (schema.estadoIsBit) {
+          orderByAtivoPrimeiro = `CAST(${ec} AS INT) DESC, `;
+        } else {
+          orderByAtivoPrimeiro = `(CASE WHEN LTRIM(RTRIM(${ec})) COLLATE Latin1_General_CI_AI = N'Ativo' COLLATE Latin1_General_CI_AI THEN 0 ELSE 1 END) ASC, `;
+        }
+      }
+
       const sqlText = `
         SELECT TOP (@lim) ${selectCols.join(', ')}
         FROM Produtos p
         WHERE ${where.join(' AND ')}
-        ORDER BY p.${bracketId(orderCol)} ${order}
+        ORDER BY ${orderByAtivoPrimeiro}p.${bracketId(orderCol)} ${order}
       `;
 
       const result = await req.query(sqlText);

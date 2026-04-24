@@ -18,6 +18,9 @@ import {
   CircleDollarSign,
   Warehouse,
   ChevronDown,
+  ListFilter,
+  CircleCheck,
+  Ban,
 } from 'lucide-react';
 
 import Toast, { ToastType } from '@/components/Toast';
@@ -131,6 +134,31 @@ export default function ProdutosPage() {
   }, [load]);
 
   const schema = data?.schemaHints;
+
+  const filterResultStats = useMemo(() => {
+    if (!data) return null;
+    const rows = data.products;
+    const total = rows.length;
+    const hasEstado = Boolean(data.schemaHints?.estado);
+    let ativos = 0;
+    let inativos = 0;
+    let outros = 0;
+    let semStatus = 0;
+    if (hasEstado) {
+      for (const p of rows) {
+        const raw = p.estado;
+        if (raw == null || String(raw).trim() === '') {
+          semStatus++;
+          continue;
+        }
+        const e = String(raw).trim().toLowerCase();
+        if (e === 'ativo' || e === '1' || e === 'true' || e === 'sim') ativos++;
+        else if (e === 'inativo' || e === '0' || e === 'false' || e === 'não' || e === 'nao') inativos++;
+        else outros++;
+      }
+    }
+    return { total, hasEstado, ativos, inativos, outros, semStatus };
+  }, [data]);
 
   const openNew = () => {
     setEditing(null);
@@ -483,6 +511,64 @@ export default function ProdutosPage() {
             Preço, Estoque). A direção alterna a cada clique.
           </p>
         </section>
+
+        {filterResultStats && !loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-[#D4CEC4] bg-gradient-to-br from-white to-[#FAF8F4] px-4 py-3 shadow-[0_2px_10px_rgba(31,19,18,0.06)]">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8A8279]">
+                  Resultado do filtro
+                </p>
+                <ListFilter className="h-4 w-4 shrink-0 text-[#B0A69D]" aria-hidden />
+              </div>
+              <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1F1312]">
+                {filterResultStats.total}
+              </p>
+              <p className="text-xs text-[#736A64]">
+                {filterResultStats.total === 1 ? 'linha na lista' : 'linhas na lista'}
+                {filterResultStats.total >= 300 ? ' (limite 300)' : ''}
+              </p>
+            </div>
+            {filterResultStats.hasEstado ? (
+              <>
+                <div className="rounded-2xl border border-[#C8E6D4] bg-gradient-to-br from-[#F4FBF6] to-white px-4 py-3 shadow-[0_2px_10px_rgba(31,19,18,0.05)]">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5A7D62]">Ativos</p>
+                    <CircleCheck className="h-4 w-4 shrink-0 text-[#3D7A4E]" aria-hidden />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1F4D2E]">
+                    {filterResultStats.ativos}
+                  </p>
+                  <p className="text-xs text-[#5C6B5E]">neste resultado</p>
+                </div>
+                <div className="rounded-2xl border border-[#E8D4CF] bg-gradient-to-br from-[#FFF9F7] to-white px-4 py-3 shadow-[0_2px_10px_rgba(31,19,18,0.05)]">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8A6B62]">Inativos</p>
+                    <Ban className="h-4 w-4 shrink-0 text-[#A67C72]" aria-hidden />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#5C2E24]">
+                    {filterResultStats.inativos}
+                  </p>
+                  <p className="text-xs text-[#7A625C]">neste resultado</p>
+                </div>
+                {(filterResultStats.outros > 0 || filterResultStats.semStatus > 0) && (
+                  <div className="rounded-2xl border border-[#D4CEC4] bg-gradient-to-br from-[#FAFAF8] to-white px-4 py-3 shadow-[0_2px_10px_rgba(31,19,18,0.05)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8A8279]">
+                        Outros / sem status
+                      </p>
+                      <Package className="h-4 w-4 shrink-0 text-[#B0A69D]" aria-hidden />
+                    </div>
+                    <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#5C534D]">
+                      {filterResultStats.outros + filterResultStats.semStatus}
+                    </p>
+                    <p className="text-xs text-[#736A64]">valor vazio ou diferente de Ativo/Inativo</p>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
         <section className="bg-white rounded-xl border border-[#E6E1CF] shadow-sm overflow-hidden">
           {loading && !data ? (
