@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Product } from '@/lib/api';
+import ProductPhoto from '@/components/ProductPhoto';
 
 interface SearchBoxProps {
   onSelectProduct: (product: Product) => void;
@@ -275,26 +276,32 @@ export default function SearchBox({ onSelectProduct, onFocus }: SearchBoxProps) 
               }}
               role="option"
               aria-selected={index === selectedIndex}
-              className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors ${index === selectedIndex ? 'bg-blue-100 ring-2 ring-blue-300' : ''
+              className={`w-full text-left px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-blue-50 transition-colors ${index === selectedIndex ? 'bg-blue-100 ring-2 ring-blue-300' : ''
                 } ${index !== results.length - 1 ? 'border-b border-gray-100' : ''}`}
             >
-              <div className="flex justify-between items-center">
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">
+              <div className="flex items-center gap-3 min-w-0">
+                <ProductPhoto
+                  src={product.imagemUrl}
+                  alt={product.nome}
+                  variant="thumb"
+                  className="!h-11 !w-11 shrink-0 sm:!h-12 sm:!w-12"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
                     {highlightText(product.nome, query)}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 truncate">
                     ID: {product.id}
                     {query && !isNaN(Number(query)) && Number(query) === product.id && (
                       <span className="ml-2 text-blue-600 font-semibold">✓ Encontrado por ID</span>
                     )}
                   </p>
                 </div>
-                <div className="text-right ml-4">
-                  <p className="font-bold text-blue-600">
+                <div className="text-right shrink-0 pl-1">
+                  <p className="font-bold text-blue-600 whitespace-nowrap">
                     R$ {product.preco.toFixed(2).replace('.', ',')}
                   </p>
-                  <p className={`text-xs ${product.estoque > 0 ? 'text-gray-500' : 'text-red-500 font-semibold'}`}>
+                  <p className={`text-xs whitespace-nowrap ${product.estoque > 0 ? 'text-gray-500' : 'text-red-500 font-semibold'}`}>
                     Estoque: {product.estoque}
                   </p>
                 </div>

@@ -201,6 +201,19 @@ export async function GET(request: NextRequest) {
     const requestDb = pool.request();
     const schema = await getProdutosColumnSchema();
 
+    /** PDV: só listar produtos ativos quando existir coluna de status */
+    let pdvSoloAtivoSql = '';
+    if (schema.estadoColumn) {
+      const ec = bracketId(schema.estadoColumn);
+      if (schema.estadoIsBit) {
+        requestDb.input('pdvSoloAtivoBit', sql.Bit, 1);
+        pdvSoloAtivoSql = ` AND ${ec} = @pdvSoloAtivoBit`;
+      } else {
+        requestDb.input('pdvSoloAtivoTxt', sql.NVarChar(100), 'Ativo');
+        pdvSoloAtivoSql = ` AND LTRIM(RTRIM(${ec})) COLLATE Latin1_General_CI_AI = @pdvSoloAtivoTxt COLLATE Latin1_General_CI_AI`;
+      }
+    }
+
     let result: sql.IResult<any>;
 
     const trimmedQuery = query.trim();
@@ -218,7 +231,7 @@ export async function GET(request: NextRequest) {
       result = await requestDb.query(`
         SELECT ${cols.join(', ')}
         FROM Produtos
-        WHERE Id = @id
+        WHERE Id = @id${pdvSoloAtivoSql}
       `);
     } else if (trimmedQuery) {
       requestDb.input('nome', sql.VarChar(100), `%${trimmedQuery}%`);
@@ -234,7 +247,7 @@ export async function GET(request: NextRequest) {
       result = await requestDb.query(`
         SELECT TOP 100 ${cols.join(', ')}
         FROM Produtos
-        WHERE Nome COLLATE Latin1_General_CI_AI LIKE @nome COLLATE Latin1_General_CI_AI
+        WHERE Nome COLLATE Latin1_General_CI_AI LIKE @nome COLLATE Latin1_General_CI_AI${pdvSoloAtivoSql}
         ORDER BY Nome
       `);
     } else {
@@ -250,6 +263,7 @@ export async function GET(request: NextRequest) {
       result = await requestDb.query(`
         SELECT TOP 100 ${cols.join(', ')}
         FROM Produtos
+        WHERE 1 = 1${pdvSoloAtivoSql}
         ORDER BY Nome
       `);
     }

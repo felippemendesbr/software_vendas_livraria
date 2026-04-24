@@ -1,0 +1,23 @@
+---
+description: Banco como fonte da verdade — leitura e escrita sempre alinhadas ao SQL Server
+alwaysApply: true
+---
+
+# Dados: banco primeiro, persistência obrigatória
+
+## Leitura (banco → front)
+
+- A UI deve refletir **o que veio da API**, que por sua vez consulta o **banco** (`SELECT`). Não exibir como “verdade oficial” um estado calculado só no cliente se o banco tiver coluna ou regra correspondente (ex.: `ativo` a partir de `[Status]`, foto a partir de `path_image`).
+- Evitar listas ou detalhes que dependam só de cache local sem **refetch** após operações que mudam o banco.
+- Para listagens e buscas de produtos, usar `cache: 'no-store` nos `fetch` do cliente quando fizer sentido, e cabeçalhos `Cache-Control` nas rotas `GET` que alimentam dados cadastrais.
+
+## Escrita (front → banco)
+
+- **Toda alteração feita pelo usuário no front** deve chegar ao banco via **rota de API** que execute `INSERT` / `UPDATE` / `DELETE` (ou transação equivalente). Não deixar edição “só no estado React” sem persistir.
+- Ao implementar novo campo na tela: incluir na API o **mesmo campo na tabela** (ou regra documentada), mapear no `SELECT` de leitura e no `UPDATE`/`INSERT` de gravação.
+- Regras de negócio que afetam colunas (ex.: `[Status]` conforme estoque) devem ser **aplicadas na API ou no banco** ao salvar, não apenas desenhadas na UI.
+
+## Resumo
+
+1. Consumir do banco (via API) para mostrar no front.  
+2. Persistir no banco (via API) tudo o que o usuário alterar no front.
