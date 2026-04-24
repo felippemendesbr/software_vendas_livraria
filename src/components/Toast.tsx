@@ -36,7 +36,7 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 ${bgColors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] max-w-md animate-slide-in`}
+      className={`fixed top-4 right-4 z-[110] max-w-[calc(100vw-2rem)] ${bgColors[type]} text-white px-4 sm:px-6 py-3 sm:py-4 rounded-lg shadow-lg flex items-center gap-3 min-w-0 sm:min-w-[280px] sm:max-w-md animate-slide-in`}
     >
       <span className="text-xl font-bold">{icons[type]}</span>
       <p className="flex-1">{message}</p>

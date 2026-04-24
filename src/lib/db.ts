@@ -447,3 +447,117 @@ export function formatErrorForResponse(err: any): {
     database: config.database,
   });
 }
+
+/** Colunas opcionais em Produtos (nomes reais no banco, para SELECT/INSERT/UPDATE dinâmicos) */
+export interface ProdutosColumnSchema {
+  imagemColumn: string | null;
+  estadoColumn: string | null;
+  estadoIsBit: boolean;
+}
+
+const IMAGEM_COLUMN_CANDIDATES = [
+  'ImagemUrl',
+  'UrlImagem',
+  'URLImagem',
+  'FotoUrl',
+  'Imagem',
+  'LinkImagem',
+  'CaminhoImagem',
+  'UrlFoto',
+  'Foto',
+  'FotoProduto',
+  'Capa',
+  'UrlCapa',
+  'ImagemProduto',
+  'PathImagem',
+];
+
+const IMAGEM_FRIENDLY_TYPES = new Set([
+  'varchar',
+  'nvarchar',
+  'char',
+  'nchar',
+  'text',
+  'ntext',
+]);
+
+const ESTADO_VARCHAR_CANDIDATES = ['Estado', 'Status', 'Situacao'];
+const ESTADO_BIT_CANDIDATES = ['Ativo'];
+
+let produtosColumnSchemaCache: ProdutosColumnSchema | null = null;
+
+/**
+ * Descobre colunas opcionais da tabela Produtos (imagem URL, estado / ativo).
+ */
+export async function discoverProdutosColumnSchema(): Promise<ProdutosColumnSchema> {
+  const pool = await getDbPool();
+  const result = await pool.request().query(`
+    SELECT COLUMN_NAME, DATA_TYPE
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'Produtos'
+  `);
+
+  const byLower = new Map<string, { name: string; dataType: string }>();
+  for (const row of result.recordset as { COLUMN_NAME: string; DATA_TYPE: string }[]) {
+    byLower.set(row.COLUMN_NAME.toLowerCase(), {
+      name: row.COLUMN_NAME,
+      dataType: (row.DATA_TYPE || '').toLowerCase(),
+    });
+  }
+
+  let imagemColumn: string | null = null;
+  for (const c of IMAGEM_COLUMN_CANDIDATES) {
+    const hit = byLower.get(c.toLowerCase());
+    if (hit) {
+      imagemColumn = hit.name;
+      break;
+    }
+  }
+
+  // Fallback: qualquer coluna cujo nome sugira URL de imagem e tipo seja texto
+  if (!imagemColumn) {
+    const nameHint = /imagem|foto|photo|picture|capa|banner|thumb|url.*img|img.*url/i;
+    for (const [, col] of byLower) {
+      if (!nameHint.test(col.name)) continue;
+      if (IMAGEM_FRIENDLY_TYPES.has(col.dataType)) {
+        imagemColumn = col.name;
+        break;
+      }
+    }
+  }
+
+  let estadoColumn: string | null = null;
+  let estadoIsBit = false;
+  for (const c of ESTADO_VARCHAR_CANDIDATES) {
+    const hit = byLower.get(c.toLowerCase());
+    if (hit) {
+      estadoColumn = hit.name;
+      estadoIsBit = hit.dataType === 'bit';
+      break;
+    }
+  }
+  if (!estadoColumn) {
+    for (const c of ESTADO_BIT_CANDIDATES) {
+      const hit = byLower.get(c.toLowerCase());
+      if (hit) {
+        estadoColumn = hit.name;
+        estadoIsBit = true;
+        break;
+      }
+    }
+  }
+
+  return { imagemColumn, estadoColumn, estadoIsBit };
+}
+
+export async function getProdutosColumnSchema(): Promise<ProdutosColumnSchema> {
+  if (!produtosColumnSchemaCache) {
+    produtosColumnSchemaCache = await discoverProdutosColumnSchema();
+  }
+  return produtosColumnSchemaCache;
+}
+
+/** Invalida cache de schema (útil em testes ou após migração) */
+export function clearProdutosColumnSchemaCache(): void {
+  produtosColumnSchemaCache = null;
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, ShoppingCart } from 'lucide-react';
+import { BarChart3, Package, ShoppingCart } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -28,12 +28,12 @@ export default function Home() {
         />
       </motion.div>
 
-      <section className="flex-1 flex items-center justify-center px-4 md:p-4">
+      <section className="flex-1 flex items-start justify-center px-4 md:p-4 pb-12 md:pb-16">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
-          className="w-full max-w-3xl bg-white rounded-2xl shadow-md p-3 sm:p-10 sm:-mt-52 border border-[#E6E1CF]"
+          className="relative z-10 w-full max-w-6xl bg-white rounded-2xl shadow-md p-4 sm:p-8 md:p-10 -mt-8 sm:-mt-16 md:-mt-24 lg:-mt-32 border border-[#E6E1CF]"
         >
 
           <motion.div
@@ -71,7 +71,7 @@ export default function Home() {
                 transition: { staggerChildren: 0.15 },
               },
             }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mt-6"
           >
             <motion.button
               variants={{
@@ -118,6 +118,30 @@ export default function Home() {
 
               <p className="text-gray-500 text-sm sm:text-base group-hover:text-[#1f0000]/60">
                 Visualizar relatórios de vendas
+              </p>
+            </motion.button>
+
+            <motion.button
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 },
+              }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              onClick={() => router.push('/produtos')}
+              className="
+                group bg-white hover:bg-[#F2F1E6] rounded-2xl shadow-md
+                hover:shadow-2xl transition-all duration-300
+                p-8 sm:p-10 flex flex-col items-center text-center
+                hover:scale-[1.03]
+              "
+            >
+              <h2 className="flex items-center gap-2 text-xl sm:text-2xl font-semibold text-gray-900 group-hover:text-[#1f0000] mb-2">
+                <Package className="w-6 h-6 text-gray-600 group-hover:text-[#1f0000]" />
+                Produtos
+              </h2>
+
+              <p className="text-gray-500 text-sm sm:text-base group-hover:text-[#1f0000]/60">
+                Cadastrar, preços, estoque e imagens
               </p>
             </motion.button>
           </motion.div>
